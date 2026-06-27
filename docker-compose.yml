@@ -1,0 +1,281 @@
+version: '3.8'
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  AI-Enhanced CRM System — Docker Compose
+#  Startup order: oracle-xe → eureka → config → gateway → (all business svcs) → frontend
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-db-env: &db-env
+  SPRING_DATASOURCE_URL: jdbc:oracle:thin:@oracle-xe:1521:XE
+  SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-system}
+  SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-oracle}
+
+x-eureka-env: &eureka-env
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+  EUREKA_INSTANCE_PREFERIPADDRESS: "true"
+
+x-java-opts: &java-opts
+  JAVA_OPTS: "-Xms256m -Xmx512m"
+
+services:
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  oracle-xe:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: crm-oracle-xe
+    environment:
+      ORACLE_PASSWORD: ${DB_PASSWORD:-oracle}
+      ORACLE_DATABASE: XE
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./database/01_tables.sql:/container-entrypoint-initdb.d/01_tables.sql
+      - ./database/02_triggers.sql:/container-entrypoint-initdb.d/02_triggers.sql
+      - ./database/03_seed.sql:/container-entrypoint-initdb.d/03_seed.sql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 20s
+      retries: 15
+      start_period: 120s
+    networks:
+      - crm-network
+
+  # ── Service Discovery ───────────────────────────────────────────────────────
+  eureka-server:
+    build:
+      context: ./backend
+      dockerfile: eureka-server/Dockerfile
+    container_name: crm-eureka
+    ports:
+      - "8761:8761"
+    environment:
+      <<: *java-opts
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8761/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - crm-network
+
+  # ── Config Server ───────────────────────────────────────────────────────────
+  config-server:
+    build:
+      context: ./backend
+      dockerfile: config-server/Dockerfile
+    container_name: crm-config
+    ports:
+      - "8888:8888"
+    environment:
+      <<: [*java-opts, *eureka-env]
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8888/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - crm-network
+
+  # ── API Gateway ─────────────────────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: api-gateway/Dockerfile
+    container_name: crm-gateway
+    ports:
+      - "9090:9090"
+    environment:
+      <<: [*java-opts, *eureka-env]
+      SPRING_CLOUD_GATEWAY_GLOBALCORS_CORSCONFIGURATIONS_[/**]_ALLOWEDORIGINS: ${CORS_ORIGIN:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-crmSecretKey2025SuperSecureKeyForJWTTokenGenerationAtLeast256Bits}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/actuator/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 50s
+    networks:
+      - crm-network
+
+  # ── Auth Service ────────────────────────────────────────────────────────────
+  auth-service:
+    build:
+      context: ./backend
+      dockerfile: auth-service/Dockerfile
+    container_name: crm-auth
+    ports:
+      - "8081:8081"
+    environment:
+      <<: [*java-opts, *db-env, *eureka-env]
+      JWT_SECRET: ${JWT_SECRET:-crmSecretKey2025SuperSecureKeyForJWTTokenGenerationAtLeast256Bits}
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - crm-network
+
+  # ── Customer Service ────────────────────────────────────────────────────────
+  customer-service:
+    build:
+      context: ./backend
+      dockerfile: customer-service/Dockerfile
+    container_name: crm-customer
+    ports:
+      - "8082:8082"
+    environment:
+      <<: [*java-opts, *db-env, *eureka-env]
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - crm-network
+
+  # ── Lead Service ────────────────────────────────────────────────────────────
+  lead-service:
+    build:
+      context: ./backend
+      dockerfile: lead-service/Dockerfile
+    container_name: crm-lead
+    ports:
+      - "8083:8083"
+    environment:
+      <<: [*java-opts, *db-env, *eureka-env]
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - crm-network
+
+  # ── Analytics Service ───────────────────────────────────────────────────────
+  analytics-service:
+    build:
+      context: ./backend
+      dockerfile: analytics-service/Dockerfile
+    container_name: crm-analytics
+    ports:
+      - "8084:8084"
+    environment:
+      <<: [*java-opts, *db-env, *eureka-env]
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - crm-network
+
+  # ── Recommendation Service ──────────────────────────────────────────────────
+  recommendation-service:
+    build:
+      context: ./backend
+      dockerfile: recommendation-service/Dockerfile
+    container_name: crm-recommendation
+    ports:
+      - "8085:8085"
+    environment:
+      <<: [*java-opts, *db-env, *eureka-env]
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - crm-network
+
+  # ── Notification Service ────────────────────────────────────────────────────
+  notification-service:
+    build:
+      context: ./backend
+      dockerfile: notification-service/Dockerfile
+    container_name: crm-notification
+    ports:
+      - "8086:8086"
+    environment:
+      <<: [*java-opts, *db-env, *eureka-env]
+      SPRING_MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      SPRING_MAIL_PORT: ${MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - crm-network
+
+  # ── Task Service ────────────────────────────────────────────────────────────
+  task-service:
+    build:
+      context: ./backend
+      dockerfile: task-service/Dockerfile
+    container_name: crm-task
+    ports:
+      - "8087:8087"
+    environment:
+      <<: [*java-opts, *db-env, *eureka-env]
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - crm-network
+
+  # ── Social Analytics Service ────────────────────────────────────────────────
+  social-analytics-service:
+    build:
+      context: ./backend
+      dockerfile: social-analytics-service/Dockerfile
+    container_name: crm-social
+    ports:
+      - "8088:8088"
+    environment:
+      <<: [*java-opts, *db-env, *eureka-env]
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - crm-network
+
+  # ── React Frontend ──────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend/crm-frontend
+    container_name: crm-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - crm-network
+
+# ── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  oracle-data:
+    driver: local
+
+# ── Network ───────────────────────────────────────────────────────────────────
+networks:
+  crm-network:
+    driver: bridge

@@ -1,0 +1,89 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "http://localhost:3000"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
+          filters:
+            - name: JwtAuthenticationFilter
+
+        - id: customer-service
+          uri: lb://customer-service
+          predicates:
+            - Path=/customers/**
+          filters:
+            - name: JwtAuthenticationFilter
+
+        - id: lead-service
+          uri: lb://lead-service
+          predicates:
+            - Path=/leads/**
+          filters:
+            - name: JwtAuthenticationFilter
+
+        - id: analytics-service
+          uri: lb://analytics-service
+          predicates:
+            - Path=/analytics/**
+          filters:
+            - name: JwtAuthenticationFilter
+
+        - id: recommendation-service
+          uri: lb://recommendation-service
+          predicates:
+            - Path=/recommendations/**
+          filters:
+            - name: JwtAuthenticationFilter
+
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/notifications/**
+          filters:
+            - name: JwtAuthenticationFilter
+
+        - id: task-service
+          uri: lb://task-service
+          predicates:
+            - Path=/tasks/**
+          filters:
+            - name: JwtAuthenticationFilter
+
+        - id: social-analytics-service
+          uri: lb://social-analytics-service
+          predicates:
+            - Path=/social/**
+          filters:
+            - name: JwtAuthenticationFilter
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+jwt:
+  secret: crmSecretKey2025SuperSecureKeyForJWTTokenGenerationAtLeast256Bits
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

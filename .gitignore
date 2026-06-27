@@ -1,0 +1,45 @@
+# Maven build outputs
+**/target/
+
+# Node
+**/node_modules/
+**/dist/
+**/.vite/
+
+# Logs
+*.log
+logs/
+
+# Environment secrets
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Claude Code (machine-specific settings)
+.claude/
+
+# Database runtime outputs
+database/schema_error.txt
+database/schema_output.txt
+
+# Spring Boot logs
+spring.log
