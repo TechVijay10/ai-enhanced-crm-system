@@ -30,9 +30,9 @@ services:
       - "1521:1521"
     volumes:
       - oracle-data:/opt/oracle/oradata
-      - ./database/01_tables.sql:/container-entrypoint-initdb.d/01_tables.sql
-      - ./database/02_triggers.sql:/container-entrypoint-initdb.d/02_triggers.sql
-      - ./database/03_seed.sql:/container-entrypoint-initdb.d/03_seed.sql
+      - ./database/migrations/01_tables.sql:/container-entrypoint-initdb.d/01_tables.sql
+      - ./database/migrations/02_triggers.sql:/container-entrypoint-initdb.d/02_triggers.sql
+      - ./database/migrations/03_seed.sql:/container-entrypoint-initdb.d/03_seed.sql
     healthcheck:
       test: ["CMD", "healthcheck.sh"]
       interval: 30s
@@ -261,7 +261,7 @@ services:
   # ── React Frontend ──────────────────────────────────────────────────────────
   frontend:
     build:
-      context: ./frontend/crm-frontend
+      context: ./frontend
     container_name: crm-frontend
     ports:
       - "3000:80"
